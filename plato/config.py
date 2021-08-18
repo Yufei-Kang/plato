@@ -78,16 +78,12 @@ class Config:
             else:
                 filename = args.config
 
-            # if the configuration file not exist, create a fake config object
             if os.path.isfile(filename):
                 with open(filename, 'r') as config_file:
-                    config = yaml.load(config_file, Loader=yaml.FullLoader)
-                    # A temporary solution for config['server']['simulation']
-                    if 'simulation' not in config['server']:
-                        config['server']['simulation'] = True
+                    config = yaml.load(config_file, Loader=yaml.SafeLoader)
             else:
-                # create a default configured config
-                config = Config.defaultConfig()
+                # if the configuration file does not exist, use a default one
+                config = Config.default_config()
 
             Config.clients = Config.namedtuple_from_dict(config['clients'])
             Config.server = Config.namedtuple_from_dict(config['server'])
@@ -111,19 +107,11 @@ class Config:
                     server_type = Config.algorithm.type
                     Config.result_dir = f'./results/{datasource}/{model}/{server_type}/'
 
-            if 'results' in config and hasattr(Config().results,
-                                               'trainer_counter_dir'):
-                trainer_counter_dir = Config.results.trainer_counter_dir
-                if not os.path.exists(trainer_counter_dir):
-                    os.makedirs(trainer_counter_dir)
-            else:
-                trainer_counter_dir = os.path.dirname(__file__)
-
-            # Used to limit the maximum number of concurrent trainers
-            Config.sql_connection = sqlite3.connect(
-                trainer_counter_dir + '/running_trainers.sqlitedb')
-
-            Config().cursor = Config.sql_connection.cursor()
+            if hasattr(Config().trainer, 'max_concurrency'):
+                # Using a temporary SQLite database to limit the maximum number of concurrent
+                # trainers
+                Config.sql_connection = sqlite3.connect("/tmp/running_trainers.sqlitedb")
+                Config().cursor = Config.sql_connection.cursor()
 
             # Customizable dictionary of global parameters
             Config.params: dict = {}
@@ -197,16 +185,15 @@ class Config:
         ) and torch.cuda.device_count() > 1
 
     @staticmethod
-    def defaultConfig() -> dict:
-        ''' list a default configuration when the config file is missing'''
+    def default_config() -> dict:
+        ''' Supply a default configuration when the config file is missing. '''
         config = {}
         config['clients'] = {}
         config['clients']['type'] = 'simple'
-        config['clients']['total_clients'] = 1
+        config['clients']['total_clients'] = 0
         config['clients']['per_round'] = 1
         config['clients']['do_test'] = True
         config['server'] = {}
-        config['server']['simulation'] = False
         config['server']['address'] = '127.0.0.1'
         config['server']['port'] = 8000
         config['data'] = {}

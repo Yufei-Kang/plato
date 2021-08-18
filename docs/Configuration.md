@@ -14,7 +14,7 @@ Attributes in **bold** must be included in a configuration file, while attribute
 |:---------:|:-------:|:-----------:|:----:|
 **type**|Type of federated learning client|`simple`|A basic client who sends weight updates to the server|
 |||`mistnet`|A client for MistNet|
-|**total_clients**|The total number of clients| Any positive integer||
+|**total_clients**|The total number of clients|If this is positive number on the server, it will spawn the client processes. If this is 0, the server will not spawn any client processes||
 |**per_round**|The number of clients selected in each round| Any positive integer that is not larger than **total_clients**||
 |**do_test**|Should the clients compute test accuracy locally?| `true` or `false`|| 
 
@@ -34,13 +34,13 @@ Attributes in **bold** must be included in a configuration file, while attribute
 
 | Attribute | Meaning | Valid Value | Note |
 |:---------:|:-------:|:-----------:|:----:|
-|**dataset**| The training and testing dataset|`MNIST`, `FashionMNIST`, `CIFAR10`, `CINIC10`, `COCO`, `PASCAL_VOC`, or `TinyImageNet`||
+|**dataset**| The training and testing dataset|`MNIST`, `FashionMNIST`, `CIFAR10`, `CINIC10`, `YOLO`, `HuggingFace`, `PASCAL_VOC`, or `TinyImageNet`||
 |**data_path**|Where the dataset is located|e.g.,`./data`|For the `CINIC10` dataset, the default `data_path` is `./data/CINIC-10`, For the `TingImageNet` dataset, the default `data_path` is `./data/ting-imagenet-200`|
 |**sampler**|How to divide the entire dataset to the clients|`iid`||
 |||`iid_mindspore`||
 |||`noniid`|Could have *concentration* attribute to specify the concentration parameter in the Dirichlet distribution|
-|||`mixed`|Some clients' datasets are iid. Some are non-iid. Must have *non_iid_clients* attributes|
-|random_seed|Keep a random seed to make experiments reproducible (clients always have the same datasets)||
+|||`mixed`|Some data are iid, while others are non-iid. Must have *non_iid_clients* attributes|
+|random_seed|Use a fixed random seed so that experiments are reproducible (clients always have the same datasets)||
 |**partition_size**|Number of samples in each client's dataset|Any positive integer||
 |concentration| The concentration parameter of symmetric Dirichlet distribution, used by `noniid` **sampler** || Default value is 1|
 |*non_iid_clients*|Indexs of clients whose datasets are non-iid. Other clients' datasets are iid|e.g., 4|Must have this attribute if the **sampler** is `mixed`|
@@ -52,7 +52,7 @@ Attributes in **bold** must be included in a configuration file, while attribute
 |**type**|The type of the trainer|`basic`|
 |**rounds**|The maximum number of training rounds|Any positive integer||
 |**parallelized**|Whether the training should use multiple GPUs if available|`true` or `false`||
-|**max_concurrency**|The maximum number of clients running concurrently|Any positive integer||
+|max_concurrency|The maximum number of clients running concurrently. if this is not defined, no new processes are spawned for training|Any positive integer||
 |target_accuracy|The target accuracy of the global model|||
 |**epochs**|Number of epoches for local training in each communication round|Any positive integer||
 |**optimizer**||`SGD`, `Adam` or `FedProx`||
@@ -61,8 +61,8 @@ Attributes in **bold** must be included in a configuration file, while attribute
 |**momentum**||||
 |**weight_decay**||||   
 |lr_schedule|Learning rate scheduler|`CosineAnnealingLR`, `LambdaLR`, `StepLR`, `ReduceLROnPlateau`|| 
-|**model_name**|The machine learning model|`lenet5`, `resnet_x`, `vgg_x`,`wideresnet`, `feedback_transformer`, `yolov5`, `HuggingFace_CausalLM`, `inceptionv3`, `alexnet`, `squeezenet_x`|For `resnet_x`, x = 18, 34, 50, 101, or 152; For `vgg_x`, x = 11, 13, 16, or 19; For `squeezenet_x`, x = 0 or 1|
-|pretrained|Use a model pretrained on ImageNet or not|`True` or `False`. Default is `False`|Can be used for `inceptionv3`, `alexnet`, and `squeezenet_x` models.|
+|**model_name**|The machine learning model|`lenet5`, `resnet_x`, `vgg_x`,`wideresnet`, `feedback_transformer`, `yolov5`, `HuggingFace_CausalLM`, `inceptionv3`, `unet`, `alexnet`, `squeezenet_x`|For `resnet_x`, x = 18, 34, 50, 101, or 152; For `vgg_x`, x = 11, 13, 16, or 19; For `squeezenet_x`, x = 0 or 1|
+|pretrained|Use a model pretrained on ImageNet or not|`true` or `false`. Default is `false`|Can be used for `inceptionv3`, `alexnet`, and `squeezenet_x` models.|
 
 ### algorithm
 
@@ -81,4 +81,3 @@ Attributes in **bold** must be included in a configuration file, while attribute
 |types|Which parameter(s) will be written into a CSV file|`accuracy`, `training_time`, `round_time`, `local_epoch_num`, `edge_agg_num`|Use comma `,` to seperate parameters|
 |plot|Plot results ||Format: x\_axis&y\_axis. Use comma `,` to seperate multiple plots|
 |results_dir|The directory of results||If not specify, results will be stored under `./results/<datasource>/<model>/<server_type>/`|
-|trainer_counter_dir|The directory of running_trainers.sqlitedb||If not specify, it will be stored under `__file__`|

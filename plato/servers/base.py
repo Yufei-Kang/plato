@@ -77,7 +77,7 @@ class Server:
     def run(self, client=None, edge_server=None, edge_client=None):
         """Start a run loop for the server. """
         # Remove the running trainers table from previous runs.
-        if not Config().is_edge_server():
+        if not Config().is_edge_server() and hasattr(Config().trainer, 'max_concurrency'):
             with Config().sql_connection:
                 Config().cursor.execute("DROP TABLE IF EXISTS trainers")
 
@@ -95,7 +95,7 @@ class Server:
             # Allowing some time for the edge servers to start
             time.sleep(5)
 
-        if Config().server.simulation:
+        if Config().clients.total_clients > 0:
             Server.start_clients(client=self.client)
 
         self.start()
