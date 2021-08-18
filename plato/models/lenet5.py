@@ -119,3 +119,9 @@ class Model(nn.Module):
     def get_model(*args):
         """Obtaining an instance of this model."""
         return Model()
+
+    def param_s(self):
+        return self.param_s
+
+    def param_u(self):
+        return self.param_u

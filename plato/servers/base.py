@@ -12,10 +12,8 @@ from abc import abstractmethod
 
 import socketio
 from aiohttp import web
-
 from plato.client import run
 from plato.config import Config
-from plato.utils import s3
 
 
 class ServerEvents(socketio.AsyncNamespace):
@@ -53,7 +51,7 @@ class ServerEvents(socketio.AsyncNamespace):
 
     async def on_client_payload_done(self, sid, data):
         """ An existing client finished sending its payloads from local training. """
-        await self.plato_server.client_payload_done(sid, data['id'], data['s3_url'])
+        await self.plato_server.client_payload_done(sid, data['id'])
 
 
 class Server:
@@ -109,11 +107,8 @@ class Server:
 
         ping_interval = Config().server.ping_interval if hasattr(
             Config().server, 'ping_interval') else 3600
-        ping_timeout = Config().server.ping_timeout if hasattr(
-            Config().server, 'ping_timeout') else 360
         self.sio = socketio.AsyncServer(ping_interval=ping_interval,
-                                        max_http_buffer_size=2**31,
-                                        ping_timeout=ping_timeout)
+                                        max_http_buffer_size=2**31)
         self.sio.register_namespace(
             ServerEvents(namespace='/', plato_server=self))
         app = web.Application()
@@ -232,7 +227,8 @@ class Server:
                                     room=sid)
 
                 payload = self.algorithm.extract_weights()
-                payload = self.customize_server_payload(payload)
+                payload = self.customize_server_payload(
+                    payload, selected_client_id)
 
                 # Sending the server payload to the client
                 logging.info(
@@ -251,28 +247,21 @@ class Server:
         await self.sio.emit('payload', {'id': client_id}, room=sid)
 
     async def send(self, sid, payload, client_id) -> None:
-        """ Sending a new data payload to the client using either S3 or socket.io. """
-        if hasattr(Config().server,
-                   's3_endpoint_url') and hasattr(Config().server, 's3_bucket'):
-            payload_key = f'server_payload_{os.getpid()}_{self.current_round}'
-            s3_url = s3.send_to_s3(payload_key, payload)
-            data_size = sys.getsizeof(pickle.dumps(payload))
-        else:
-            s3_url = None
-            data_size = 0
+        """ Sending a new data payload to the client using socket.io. """
+        data_size = 0
 
-            if isinstance(payload, list):
-                for data in payload:
-                    _data = pickle.dumps(data)
-                    await self.send_in_chunks(_data, sid, client_id)
-                    data_size += sys.getsizeof(_data)
-
-            else:
-                _data = pickle.dumps(payload)
+        if isinstance(payload, list):
+            for data in payload:
+                _data = pickle.dumps(data)
                 await self.send_in_chunks(_data, sid, client_id)
-                data_size = sys.getsizeof(_data)
+                data_size += sys.getsizeof(_data)
 
-        await self.sio.emit('payload_done', {'id': client_id, 's3_url': s3_url}, room=sid)
+        else:
+            _data = pickle.dumps(payload)
+            await self.send_in_chunks(_data, sid, client_id)
+            data_size = sys.getsizeof(_data)
+
+        await self.sio.emit('payload_done', {'id': client_id}, room=sid)
 
         logging.info("[Server #%d] Sent %s MB of payload data to client #%d.",
                      os.getpid(), round(data_size / 1024**2, 2), client_id)
@@ -304,21 +293,17 @@ class Server:
             self.client_payload[sid] = [self.client_payload[sid]]
             self.client_payload[sid].append(_data)
 
-    async def client_payload_done(self, sid, client_id, s3_url):
-        """ Upon receiving all the payload from a client, eithe via S3 or socket.io. """
-        if s3_url is None:
-            assert self.client_payload[sid] is not None
+    async def client_payload_done(self, sid, client_id):
+        """ Upon receiving all the payload from a client. """
+        assert self.client_payload[sid] is not None
 
-            payload_size = 0
-            if isinstance(self.client_payload[sid], list):
-                for _data in self.client_payload[sid]:
-                    payload_size += sys.getsizeof(pickle.dumps(_data))
-            else:
-                payload_size = sys.getsizeof(pickle.dumps(
-                    self.client_payload[sid]))
+        payload_size = 0
+        if isinstance(self.client_payload[sid], list):
+            for _data in self.client_payload[sid]:
+                payload_size += sys.getsizeof(pickle.dumps(_data))
         else:
-            self.client_payload[sid] = s3.receive_from_s3(s3_url)
-            payload_size = sys.getsizeof(pickle.dumps(self.client_payload[sid]))
+            payload_size = sys.getsizeof(pickle.dumps(
+                self.client_payload[sid]))
 
         logging.info(
             "[Server #%d] Received %s MB of payload data from client #%d.",
@@ -383,7 +368,7 @@ class Server:
         return server_response
 
     @abstractmethod
-    def customize_server_payload(self, payload):
+    def customize_server_payload(self, payload, selected_client_id):
         """Wrap up generating the server payload with any additional information."""
 
     @abstractmethod
