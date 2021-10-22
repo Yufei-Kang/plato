@@ -111,8 +111,8 @@ class Trainer(basic.Trainer):
                 get_optimizer = getattr(self, "get_optimizer",
                                         optimizers.get_optimizer)
 
-                optimizer_s = get_optimizer(self.model.param_s)
-                optimizer_u = get_optimizer(self.model.param_u)
+                optimizer_s = get_optimizer(self.model.psi)
+                optimizer_u = get_optimizer(self.model.sigma)
                 
                 """
                 # Initializing the learning rate schedule, if necessary
@@ -133,7 +133,7 @@ class Trainer(basic.Trainer):
                         #######################
                         examples, labels = examples.to(self.device), labels.to(
                             self.device)
-                        optimizers.zero_grad()
+                        optimizer_s.zero_grad()
 
                         if cut_layer is None:
                             outputs_s = self.model(examples)
@@ -145,13 +145,13 @@ class Trainer(basic.Trainer):
 
                         loss_s.backward()
 
-                        optimizers.step()
+                        optimizer_s.step()
 
                         #######################
                         # unsupervised learning 
                         #######################
                     for batch_id, (examples_unlabeled,
-                                   labels) in enumerate(train_loader_u):
+                                   labels) in enumerate(train_loader_u): #why not accessiable
                         #pseduo_labels = self.model(self.loader.scale(examples_unlabeled))
                         optimizer_u.zero_grad()
                         """
@@ -225,7 +225,7 @@ class Trainer(basic.Trainer):
         else:
             y_pred = self.model.forward_from(self.scale(unlabled_samples), cut_layer)
 
-        _confident = np.where(np.max(y_pred.numpy(), axis=1)>=self.confidence)
+        _confident = np.where(np.max(y_pred.numpy(), axis=1)>=self.confidence)[0]
         
         if len(_confident) > 0: 
             # Inter-client consistency
@@ -249,9 +249,9 @@ class Trainer(basic.Trainer):
         # Regularization 
         for lid, psi in enumerate(self.psi): # psi & sig? where are they from?
             # l1 regularization
-            loss_u += tf.reduce_sum(tf.abs(psi)) * self.args.lambda_l1
+            loss_u += torch.reduce_sum(torch.abs(psi)) * self.lambda_l1
             # l2 regularization
-            loss_u += tf.math.reduce_sum(tf.math.square(self.sig[lid]-psi)) * self.args.lambda_l2
+            loss_u += torch.reduce_sum(torch.math.square(self.sig[lid]-psi)) * self.lambda_l2
         
         return loss_u, len(_confident)
 
@@ -270,8 +270,8 @@ class Trainer(basic.Trainer):
             return np.array([np.array(self.rand_augment(Image.fromarray(np.reshape(img, self.shape)), M=random.randint(2,5))) for img in images])
 
     def agreement_based_labeling(self, y_pre, y_preds=None):
-        y_pseudo = np.array(y_pred)
-        num = num_classes
+        y_pseudo = np.array(y_pre)
+        num = self.num_classes
 
         y_vote = np.eye(num, np.argmax(y_pseudo, axis=1))
         y_votes = np.sum([np.eye(num, np.argmax(y_rm, axis=1)) for y_rm in y_preds], axis=0)

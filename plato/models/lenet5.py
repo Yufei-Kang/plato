@@ -9,6 +9,8 @@ import collections
 
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn.Linear as Linear
+import torch.nn.Conv2d as Conv2d
 
 
 class Model(nn.Module):
@@ -22,7 +24,7 @@ class Model(nn.Module):
 
         # We pad the image to get an input size of 32x32 as for the
         # original network in the LeCun paper
-        self.conv1 = nn.Conv2d(in_channels=1,
+        self.conv1 = nn.Decomposed_Conv2d(in_channels=1,
                                out_channels=6,
                                kernel_size=5,
                                stride=1,
@@ -30,7 +32,7 @@ class Model(nn.Module):
                                bias=True)
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(in_channels=6,
+        self.conv2 = nn.Decomposed_Conv2d(in_channels=6,
                                out_channels=16,
                                kernel_size=5,
                                stride=1,
@@ -38,14 +40,14 @@ class Model(nn.Module):
                                bias=True)
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv3 = nn.Conv2d(in_channels=16,
+        self.conv3 = nn.Decomposed_Conv2d(in_channels=16,
                                out_channels=120,
                                kernel_size=5,
                                bias=True)
         self.relu3 = nn.ReLU()
-        self.fc4 = nn.Linear(120, 84)
+        self.fc4 = nn.Decomposed_Linear(120, 84)
         self.relu4 = nn.ReLU()
-        self.fc5 = nn.Linear(84, num_classes)
+        self.fc5 = nn.Decomposed_Linear(84, num_classes)
 
         # Preparing named layers so that the model can be split and straddle
         # across the client and the server
@@ -120,8 +122,62 @@ class Model(nn.Module):
         """Obtaining an instance of this model."""
         return Model()
 
-    def param_s(self):
-        return self.param_s
+    def get_psi(self):
+        return self.get_psi
 
-    def param_u(self):
-        return self.param_u
+    def get_sigma(self):
+        return self.get_sigma
+
+
+class Decomposed_Linear(Linear):
+    def __init__(self,
+                 in_features,
+                 out_features,
+                 bias=True,
+                 device=None,
+                 dtype=None,
+                 sigma=None,
+                 psi=None,
+                 l1_thres=None) -> None:
+        super().__init__()
+        self.psi = psi
+        self.sigma = sigma
+        self.l1_thres = l1_thres
+
+    def forward(self, input):
+
+        self.weight = self.sigma + self.psi
+
+        return F.linear(input, self.weight, self.bias)
+
+class Decomposed_Conv2d(Conv2d):
+    def __init__(self, 
+                 in_channels:int, 
+                 out_channels: int,
+                 kernel_size: _size_2_t, 
+                 stride=1, 
+                 padding=0, 
+                 dilation=1, 
+                 groups=1, 
+                 bias=True, 
+                 padding_mode='zeros', 
+                 device=None, 
+                 dtype=None，
+                 psi=None,
+                 sigma=None,
+                 l1_thres=None) -> None:
+
+        super().__init__()
+
+        self.psi = psi
+        self.sigma = sigma
+        self.l1_thres = l1_thres
+
+    def forward(self, input):
+        self.weight = self.sigma + self.psi
+        return super()._conv_forward(input, self.weight, self.bias)
+       
+
+
+
+
